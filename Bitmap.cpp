@@ -1,8 +1,20 @@
 #include "Bitmap.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
 #include <iostream>
+
+Bitmap::Bitmap()
+{
+}
+
+Bitmap::Bitmap(int width, int height)
+{
+	v3_header.width = width;
+	v3_header.height = height;
+	_payload = new unsigned char[width * height];
+}
 
 int Bitmap::width()
 {
@@ -17,6 +29,32 @@ int Bitmap::height()
 unsigned char *Bitmap::payload()
 {
 	return _payload;
+}
+
+int Bitmap::getPadWidth()
+{
+	int padWidth = 1;
+	while (padWidth < width()) padWidth <<= 1;
+	return padWidth;
+}
+
+int Bitmap::getPadHeight()
+{
+	int padHeight = 1;
+	while (padHeight < height()) padHeight <<= 1;
+	return padHeight;
+}
+
+unsigned char *Bitmap::getPadded()
+{
+	int padWidth = getPadWidth();
+	int padHeight = getPadHeight();
+	unsigned char *result = new unsigned char[padWidth * padHeight];
+	for (int i = 0; i < height(); i++) {
+		memcpy(result + i * padWidth, _payload + i * width(), width());
+		memset(result + i * padWidth + width(), 0, padWidth - width());
+	}
+	return result;
 }
 
 void Bitmap::readImage(const string &fileName)
@@ -62,7 +100,7 @@ void Bitmap::writeImage(const string &fileName)
 
 	unsigned char padding[4];
 	int padding_size = width() % 4;
-	for (int i = 0; i < width(); i++) {
+	for (int i = 0; i < height(); i++) {
 		fwrite(_payload + i * width(), 1, width(), fHan);
 		if (padding_size != 0)
 			fwrite(padding, padding_size, 1, fHan);

@@ -37,11 +37,17 @@ private:
 	bmp_dib_v3_header_t v3_header;
 	unsigned char *_payload;
 public:
+	Bitmap();
+	Bitmap(int width, int height);
+	Bitmap(int width, int height, unsigned char *payload);
 	void readImage(const string &fileName);
 	void writeImage(const string &fileName);
 	int width();
 	int height();
 	unsigned char *payload();
+	unsigned char *getPadded();
+	int getPadWidth();
+	int getPadHeight();
 };
 
 #endif
