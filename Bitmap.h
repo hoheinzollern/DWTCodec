@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <string>
 
+#define DIM_HEAD_BMP 1078
+
 using namespace std;
 
 struct bmpfile_magic {
@@ -35,6 +37,7 @@ class Bitmap {
 private:
 	bmpfile_header header;
 	bmp_dib_v3_header_t v3_header;
+	unsigned char fake[2048];
 	unsigned char *_payload;
 public:
 	Bitmap();

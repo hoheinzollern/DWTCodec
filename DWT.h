@@ -12,10 +12,15 @@ private:
 	float *W;
 	int width;
 	int height;
+	int realWidth;
+	int realHeight;
 public:
+	DWT();
 	DWT(Bitmap *input);
 	void compress(int threshold);
 	void save(const string &fileName);
+	void saveDWT(const string &fileName);
+	void readDWT(const string &fileName);
 };
 
 #endif
