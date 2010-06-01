@@ -72,6 +72,8 @@ void Bitmap::readImage(const string &fileName)
 	}
 	fread(&header, sizeof(bmpfile_header), 1, fHan);
 	fread(&v3_header, sizeof(bmp_dib_v3_header_t), 1, fHan);
+	fread(fake, header.bmp_offset - sizeof(bmpfile_magic)
+		- sizeof(bmpfile_header) - sizeof(bmp_dib_v3_header_t), 1, fHan);
 
 	_payload = new unsigned char[width() * height()];
 	unsigned char padding[4];
@@ -97,6 +99,8 @@ void Bitmap::writeImage(const string &fileName)
 	fwrite(&magic, sizeof(bmpfile_magic), 1, fHan);
 	fwrite(&header, sizeof(bmpfile_header), 1, fHan);
 	fwrite(&v3_header, sizeof(bmp_dib_v3_header_t), 1, fHan);
+	fwrite(fake, header.bmp_offset - sizeof(bmpfile_magic)
+		- sizeof(bmpfile_header) - sizeof(bmp_dib_v3_header_t), 1, fHan);
 
 	unsigned char padding[4];
 	int padding_size = width() % 4;

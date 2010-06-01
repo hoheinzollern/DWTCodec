@@ -9,7 +9,7 @@ class DWT {
 private:
 	Bitmap *input;
 	Bitmap *output;
-	float *W;
+	int *W;
 	int width;
 	int height;
 public:

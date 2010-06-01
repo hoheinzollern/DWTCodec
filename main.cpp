@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 	Bitmap *src = new Bitmap();
 	src->readImage(string(argv[1]));
 	DWT *dwt = new DWT(src);
-	//dwt->compress(32);
+	dwt->compress(64);
 	dwt->save(string(argv[2]));
 	return 0;
 }

@@ -4,13 +4,13 @@
 #include <cstring>
 #include <iostream>
 
-void transform(float *src, int length, int step)
+void transform(int *src, int length, int step)
 {
-	float *tmp = new float[length];
-	for (int len = length/2; len > 1; len /= 2) {
+	int *tmp = new int[length];
+	for (int len = length/2; len > 0; len /= 2) {
 		for (int i = 0; i < len; i++) {
-			int c = src[i*2*step] + src[(i*2+1)*step];
-			int w = src[i*2*step] - src[(i*2+1)*step];
+			float c = (src[i*2*step] + src[(i*2+1)*step]);
+			float w = (src[i*2*step] - src[(i*2+1)*step]);
 			tmp[i] = c;
 			tmp[i+len] = w;
 		}
@@ -20,20 +20,27 @@ void transform(float *src, int length, int step)
 	delete[] tmp;
 }
 
-void untransform(float *src, int length, int step)
+void untransform(int *src, int length, int step)
 {
-	float *tmp = new float[length];
+	int *tmp = new int[length];
 	for (int len = 1; len < length; len *= 2) {
 		for (int i = 0; i < len; i++) {
-			int c = src[i*2*step] - src[(i*2+1)*step];
-			int w = src[i*2*step] + src[(i*2+1)*step];
-			tmp[i] = c;
-			tmp[i+len] = w;
+			float c = (src[i*step] + src[(i+len)*step]) / 2;
+			float w = (src[i*step] - src[(i+len)*step]) / 2;
+			tmp[i*2] = c;
+			tmp[i*2+1] = w;
 		}
 		for (int i = 0; i < len*2; i++)
 			src[i*step] = tmp[i];
 	}
 	delete[] tmp;
+}
+
+unsigned char normalize(int val)
+{
+	if (val > 255) return 255;
+	if (val < 0) return 0;
+	return val;
 }
 
 DWT::DWT(Bitmap *input)
@@ -42,7 +49,7 @@ DWT::DWT(Bitmap *input)
 	width = input->getPadWidth();
 	height = input->getPadHeight();
 	unsigned char *src = input->getPadded();
-	W = new float[width * height];
+	W = new int[width * height];
 	for (int i = 0; i < width * height; i++)
 		W[i] = src[i];
 	delete[] src;
@@ -63,7 +70,8 @@ void DWT::compress(int threshold)
 			c++;
 		}
 	}
-	cout << c << " coefficients over " << width * height << " set to 0 (" << float(c)/(width*height)*100 << "%)" << endl;
+	cout << c << " coefficients over " << width * height
+		<< " set to 0 (" << float(c)/(width*height)*100 << "%)" << endl;
 }
 
 void DWT::save(const string &fileName)
@@ -78,7 +86,7 @@ void DWT::save(const string &fileName)
 	unsigned char *payload = input->payload();
 	for (int i = 0; i < outHeight; i++) {
 		for (int j = 0; j < outWidth; j++) {
-			payload[i*outWidth + j] = W[i*width + j];
+			payload[i*outWidth + j] = normalize(W[i*width + j]);
 		}
 	}
 	input->writeImage(fileName);
