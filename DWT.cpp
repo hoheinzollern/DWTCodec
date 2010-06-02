@@ -49,7 +49,7 @@ void DWT::transform1d(float *src, int length, int step)
 			float c = (src[i*2*step] + src[(i*2+1)*step]);
 			float w = (src[i*2*step] - src[(i*2+1)*step]);
 			tmp[i] = round(c);
-			tmp[i+len] = w;
+			tmp[i+len] = round(w);
 		}
 		for (int i = 0; i < len*2; i++)
 			src[i*step] = tmp[i];
@@ -152,7 +152,7 @@ void DWT::saveDWT(const string &fileName)
 	for (int i = 0; i < height; i++) {
 		for (int j = 0; j < width; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
-				unsigned short int l = range((coeff[i*width + j]-minVal)*C);
+				unsigned int l = range((coeff[i*width + j]-minVal)*C);
 				if (!status) {
 					tmp = l << 12;
 				} else {

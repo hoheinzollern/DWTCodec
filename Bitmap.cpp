@@ -33,9 +33,9 @@ Bitmap::Bitmap(int width, int height)
 	_payload = new unsigned char[width * height];
 	if (!palette_initialized) {
 		for (int i = 0; i < 256; i++) {
-			palette[i*4] = nrm(i);
-			palette[i*4+1] = nrm(i);
-			palette[i*4+2] = nrm(i);
+			palette[i*4] = i;
+			palette[i*4+1] = i;
+			palette[i*4+2] = i;
 			palette[i*4+3] = 0;
 		}
 		palette_initialized = true;
