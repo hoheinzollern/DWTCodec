@@ -14,8 +14,8 @@ int main(int argc, char **argv) {
 		dwt->saveDWT(string(argv[3]));
 	} else if (strcmp(argv[1], "-d") == 0) {
 		DWT *dwt = new DWT();
-		dwt->readDWT(string(argv[2]));
-		dwt->save(string(argv[3]));
+		dwt->loadDWT(string(argv[2]));
+		dwt->saveBMP(string(argv[3]));
 	}
 	return 0;
 }

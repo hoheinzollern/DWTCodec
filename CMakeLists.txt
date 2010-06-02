@@ -1,5 +1,9 @@
-PROJECT(DWTCodec)
+cmake_minimum_required(VERSION 2.8)
+
+project(DWTCodec)
+
+find_library(LZMA REQUIRED)
 
 add_definitions(-Wall -g -fomit-frame-pointer)
 
-ADD_EXECUTABLE(dwtcodec main.cpp Bitmap.cpp DWT.cpp)
+add_executable(dwtcodec main.cpp Bitmap.cpp DWT.cpp BitWriter.cpp BitReader.cpp)

@@ -7,20 +7,24 @@ using namespace std;
 
 class DWT {
 private:
-	Bitmap *input;
+	Bitmap *bitmap;
 	Bitmap *output;
-	float *W;
+	float *coeff;
 	int width;
 	int height;
 	int realWidth;
 	int realHeight;
+	void transform1d(float *src, int length, int step);
+	void untransform1d(float *src, int length, int step);
 public:
 	DWT();
 	DWT(Bitmap *input);
+	void transform();
+	void untrasform();
 	void compress(int threshold);
-	void save(const string &fileName);
+	void saveBMP(const string &fileName);
 	void saveDWT(const string &fileName);
-	void readDWT(const string &fileName);
+	void loadDWT(const string &fileName);
 };
 
 #endif

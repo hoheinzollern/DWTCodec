@@ -5,7 +5,10 @@
 #include <cstdio>
 #include <iostream>
 
-unsigned char nrm(int val)
+bool Bitmap::palette_initialized = false;
+unsigned char Bitmap::palette[256*4] = {};
+
+unsigned char Bitmap::nrm(int val)
 {
 	if (val > 255) return 255;
 	if (val < 0) return 0;
@@ -28,12 +31,14 @@ Bitmap::Bitmap(int width, int height)
 	v3_header.ncolors = 256;
 	v3_header.nimpcolors = 256;
 	_payload = new unsigned char[width * height];
-	memset(&fake, 0, sizeof(fake));
-	for (int i = 0; i < 256; i++) {
-		fake[i*4] = nrm(i);
-		fake[i*4+1] = nrm(i);
-		fake[i*4+2] = nrm(i);
-		fake[i*4+3] = 0;
+	if (!palette_initialized) {
+		for (int i = 0; i < 256; i++) {
+			palette[i*4] = nrm(i);
+			palette[i*4+1] = nrm(i);
+			palette[i*4+2] = nrm(i);
+			palette[i*4+3] = 0;
+		}
+		palette_initialized = true;
 	}
 }
 
@@ -66,15 +71,18 @@ int Bitmap::getPadHeight()
 	return padHeight;
 }
 
-unsigned char *Bitmap::getPadded()
+float *Bitmap::getPadded(int padWidth, int padHeight)
 {
-	int padWidth = getPadWidth();
-	int padHeight = getPadHeight();
-	unsigned char *result = new unsigned char[padWidth * padHeight];
+	float *result = new float[padWidth * padHeight];
 	for (int i = 0; i < height(); i++) {
-		memcpy(result + i * padWidth, _payload + i * width(), width());
-		memset(result + i * padWidth + width(), 0, padWidth - width());
+		for (int j = 0; j < width(); j++)
+			result[i * padWidth + j] = _payload[i * width() + j];
+		for (int j = width(); j < padWidth; j++)
+			result[i * padWidth + j] = 0.0f;
 	}
+	for (int i = height(); i < padHeight; i++)
+		for (int j = 0; j < padWidth; j++)
+			result[i * padWidth + j] = 0.0f;
 	return result;
 }
 
@@ -93,21 +101,14 @@ void Bitmap::readImage(const string &fileName)
 	}
 	fread(&header, sizeof(bmpfile_header), 1, fHan);
 	fread(&v3_header, sizeof(bmp_dib_v3_header_t), 1, fHan);
-	fread(fake, header.bmp_offset - sizeof(bmpfile_magic)
-		- sizeof(bmpfile_header) - sizeof(bmp_dib_v3_header_t), 1, fHan);
+	fread(palette, sizeof(palette), 1, fHan);
 
 	cout << v3_header.bitspp << " bpp" <<endl;
 	cout << v3_header.ncolors << " ncolors" <<endl;
 	cout << v3_header.nimpcolors << " nimpcolors" <<endl;
 
 	_payload = new unsigned char[width() * height()];
-	unsigned char padding[4];
-	int padding_size = width() % 4;
-	for (int i = 0; i < width(); i++) {
-		fread(_payload + i * width(), 1, width(), fHan);
-		if (padding_size != 0)
-			fread(padding, padding_size, 1, fHan);
-	}
+	fread(_payload, 1, width() * height(), fHan);
 	fclose(fHan);
 }
 
@@ -124,15 +125,8 @@ void Bitmap::writeImage(const string &fileName)
 	fwrite(&magic, sizeof(bmpfile_magic), 1, fHan);
 	fwrite(&header, sizeof(bmpfile_header), 1, fHan);
 	fwrite(&v3_header, sizeof(bmp_dib_v3_header_t), 1, fHan);
-	fwrite(fake, header.bmp_offset - sizeof(bmpfile_magic)
-		- sizeof(bmpfile_header) - sizeof(bmp_dib_v3_header_t), 1, fHan);
+	fwrite(palette, sizeof(palette), 1, fHan);
 
-	unsigned char padding[4] = {0};
-	int padding_size = width() % 4;
-	for (int i = 0; i < height(); i++) {
-		fwrite(_payload + i * width(), 1, width(), fHan);
-		if (padding_size != 0)
-			fwrite(padding, padding_size, 1, fHan);
-	}
+	fwrite(_payload, 1, width() * height(), fHan);
 	fclose(fHan);
 }

@@ -2,18 +2,46 @@
 #include "BitReader.h"
 #include "BitWriter.h"
 
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
 #include <iostream>
-#include <cstdio>
 #include <stdint.h>
-#include <cmath>
 
-#define PREVIEW 64
+#define PREVIEW 128
 #define RANGE (0xFFF)
 
-void transform(float *src, int length, int step)
+unsigned char nrm(int val)
+{
+	if (val > 255) return 255;
+	if (val < 0) return 0;
+	return val;
+}
+
+uint range(float x)
+{
+	if (x<0) return 0;
+	if (x>RANGE) return RANGE;
+	return x;
+}
+
+DWT::DWT(Bitmap *input)
+{
+	bitmap = input;
+	width = input->getPadWidth();
+	height = input->getPadHeight();
+	realWidth = input->width();
+	realHeight = input->height();
+	coeff = input->getPadded(width, height);
+}
+
+DWT::DWT(): bitmap(0)
+{
+}
+
+void DWT::transform1d(float *src, int length, int step)
 {
 	float *tmp = new float[length];
 	for (int len = length/2; len >= PREVIEW; len /= 2) {
@@ -29,7 +57,7 @@ void transform(float *src, int length, int step)
 	delete[] tmp;
 }
 
-void untransform(float *src, int length, int step)
+void DWT::untransform1d(float *src, int length, int step)
 {
 	float *tmp = new float[length];
 	for (int len = PREVIEW; len < length; len *= 2) {
@@ -45,43 +73,30 @@ void untransform(float *src, int length, int step)
 	delete[] tmp;
 }
 
-unsigned char normalize(int val)
+void DWT::transform()
 {
-	if (val > 255) return 255;
-	if (val < 0) return 0;
-	return val;
-}
-
-DWT::DWT(Bitmap *input)
-{
-	this->input = input;
-	width = input->getPadWidth();
-	height = input->getPadHeight();
-	realWidth = input->width();
-	realHeight = input->height();
-	unsigned char *src = input->getPadded();
-	W = new float[width * height];
-	for (int i = 0; i < width * height; i++)
-		W[i] = src[i];
-	delete[] src;
-
 	for (int i = 0; i < height; i++)
-		transform(W + i * width, width, 1);
+		transform1d(coeff + i * width, width, 1);
 
 	for (int i = 0; i < width; i++)
-		transform(W + i, height, width);
+		transform1d(coeff + i, height, width);
 }
 
-DWT::DWT(): input(0)
+void DWT::untrasform()
 {
+	for (int i = 0; i < height; i++)
+		untransform1d(coeff + i * width, width, 1);
+
+	for (int i = 0; i < width; i++)
+		untransform1d(coeff + i, height, width);
 }
 
 void DWT::compress(int threshold)
 {
 	int c = 0;
 	for (int i = 0; i < height * width; i++) {
-		if (W[i] < threshold && W[i] > -threshold) {
-			W[i] = 0;
+		if (coeff[i] < threshold && coeff[i] > -threshold) {
+			coeff[i] = 0;
 			c++;
 		}
 	}
@@ -89,30 +104,17 @@ void DWT::compress(int threshold)
 			<< " set to 0 (" << float(c) / (width * height) * 100 << "%)" << endl;
 }
 
-void DWT::save(const string &fileName)
+void DWT::saveBMP(const string &fileName)
 {
-	for (int i = 0; i < height; i++)
-		untransform(W + i * width, width, 1);
-
-	for (int i = 0; i < width; i++)
-		untransform(W + i, height, width);
-
-	if (!input)
-		input = new Bitmap(realWidth, realHeight);
-	unsigned char *payload = input->payload();
+	if (!bitmap)
+		bitmap = new Bitmap(realWidth, realHeight);
+	unsigned char *payload = bitmap->payload();
 	for (int i = 0; i < realHeight; i++) {
 		for (int j = 0; j < realWidth; j++) {
-			payload[i*realWidth + j] = normalize(W[i*width + j]);
+			payload[i*realWidth + j] = nrm(coeff[i*width + j]);
 		}
 	}
-	input->writeImage(fileName);
-}
-
-uint range(float x)
-{
-	if (x<0) return 0;
-	if (x>RANGE) return RANGE;
-	return x;
+	bitmap->writeImage(fileName);
 }
 
 void DWT::saveDWT(const string &fileName)
@@ -128,19 +130,20 @@ void DWT::saveDWT(const string &fileName)
 	for (int i = 0; i < height; i++) {
 		for (int j = 0; j < width; j++){
 			if (i >= PREVIEW || j >= PREVIEW) {
-				if (W[i*width+j] > maxVal) maxVal = W[i*width+j];
-				if (-W[i*width+j] > maxVal) maxVal = -W[i*width+j];
-				if (W[i*width+j] < minVal) minVal = W[i*width+j];
-				if (-W[i*width+j] < minVal) minVal = -W[i*width+j];
+				if (coeff[i*width+j] > maxVal) maxVal = coeff[i*width+j];
+				if (-coeff[i*width+j] > maxVal) maxVal = -coeff[i*width+j];
+				if (coeff[i*width+j] < minVal) minVal = coeff[i*width+j];
+				if (-coeff[i*width+j] < minVal) minVal = -coeff[i*width+j];
 			}
 		}
 	}
+	cout << "minValue: " << minVal << endl << "maxValue: " << maxVal << endl;
 	fwrite(&minVal, sizeof(int), 1, fHan);
 	fwrite(&maxVal, sizeof(int), 1, fHan);
 	float C = RANGE/(float)(maxVal-minVal);
 	for (int i = 0; i < height && i < PREVIEW; i++) {
 		for (int j = 0; j < width && j < PREVIEW; j++) {
-			unsigned int l = W[i*width + j];
+			unsigned int l = coeff[i*width + j];
 			fwrite(&l, 4, 1, fHan);
 		}
 	}
@@ -149,7 +152,7 @@ void DWT::saveDWT(const string &fileName)
 	for (int i = 0; i < height; i++) {
 		for (int j = 0; j < width; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
-				unsigned short int l = range((W[i*width + j]-minVal)*C);
+				unsigned short int l = range((coeff[i*width + j]-minVal)*C);
 				if (!status) {
 					tmp = l << 12;
 				} else {
@@ -164,7 +167,7 @@ void DWT::saveDWT(const string &fileName)
 	fclose(fHan);
 }
 
-void DWT::readDWT(const string &fileName)
+void DWT::loadDWT(const string &fileName)
 {
 	FILE *fHan = fopen(fileName.data(), "rb");
 	fread(&width, sizeof(int), 1, fHan);
@@ -175,7 +178,7 @@ void DWT::readDWT(const string &fileName)
 			<< "height: " << height << endl
 			<< "realWidth: " << realWidth << endl
 			<< "realHeight: " << realHeight << endl;
-	W = new float[width * height];
+	coeff = new float[width * height];
 
 	int minVal, maxVal;
 	fread(&minVal, sizeof(int), 1, fHan);
@@ -185,7 +188,7 @@ void DWT::readDWT(const string &fileName)
 		for (int j = 0; j < width && j < PREVIEW; j++) {
 			unsigned int l;
 			fread(&l, 4, 1, fHan);
-			W[i*width + j] = l;
+			coeff[i*width + j] = l;
 		}
 	}
 	bool status = 0;
@@ -201,7 +204,7 @@ void DWT::readDWT(const string &fileName)
 					l = (tmp & 0x000FFF);
 				}
 				status = !status;
-				W[i*width + j] = l/C+minVal;
+				coeff[i*width + j] = l/C+minVal;
 			}
 		}
 	}

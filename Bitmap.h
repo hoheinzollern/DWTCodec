@@ -35,10 +35,14 @@ typedef struct {
 
 class Bitmap {
 private:
+	static unsigned char palette[256*4];
+	static bool palette_initialized;
+
 	bmpfile_header header;
 	bmp_dib_v3_header_t v3_header;
-	unsigned char fake[2048];
 	unsigned char *_payload;
+
+	static unsigned char nrm(int val);
 public:
 	Bitmap();
 	Bitmap(int width, int height);
@@ -48,7 +52,7 @@ public:
 	int width();
 	int height();
 	unsigned char *payload();
-	unsigned char *getPadded();
+	float *getPadded(int, int);
 	int getPadWidth();
 	int getPadHeight();
 };
