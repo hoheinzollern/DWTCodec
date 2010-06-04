@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
 		src->readImage(string(argv[2]));
 		DWT *dwt = new DWT(src);
 		dwt->transform();
-		dwt->compress(32);
+		dwt->compress(5);
 		dwt->saveDWT(string(argv[3]));
 	} else if (strcmp(argv[1], "-d") == 0) {
 		DWT *dwt = new DWT();

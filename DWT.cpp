@@ -10,7 +10,7 @@
 #include <iostream>
 #include <stdint.h>
 
-#define PREVIEW 128
+#define PREVIEW 64
 #define RANGE (0xFFF)
 
 unsigned char nrm(int val)
@@ -44,12 +44,13 @@ DWT::DWT(): bitmap(0)
 void DWT::transform1d(float *src, int length, int step)
 {
 	float *tmp = new float[length];
+	float W = 1/sqrt(2.0f);
 	for (int len = length/2; len >= PREVIEW; len /= 2) {
 		for (int i = 0; i < len; i++) {
-			float c = (src[i*2*step] + src[(i*2+1)*step]);
-			float w = (src[i*2*step] - src[(i*2+1)*step]);
-			tmp[i] = round(c);
-			tmp[i+len] = round(w);
+			float c = src[i*2*step];
+			float w = src[(i*2+1)*step];
+			tmp[i] = (c+w)*W;
+			tmp[i+len] = (c-w)*W;
 		}
 		for (int i = 0; i < len*2; i++)
 			src[i*step] = tmp[i];
@@ -60,12 +61,13 @@ void DWT::transform1d(float *src, int length, int step)
 void DWT::untransform1d(float *src, int length, int step)
 {
 	float *tmp = new float[length];
+	float W = 1/sqrt(2.0f);
 	for (int len = PREVIEW; len < length; len *= 2) {
 		for (int i = 0; i < len; i++) {
-			float c = (src[i*step] + src[(i+len)*step])/2.0;
-			float w = (src[i*step] - src[(i+len)*step])/2.0;
-			tmp[i*2] = c;
-			tmp[i*2+1] = w;
+			float c = src[i*step];
+			float w = src[(i+len)*step];
+			tmp[i*2] = (c+w)*W;
+			tmp[i*2+1] = (c-w)*W;
 		}
 		for (int i = 0; i < len*2; i++)
 			src[i*step] = tmp[i];
@@ -140,17 +142,28 @@ void DWT::saveDWT(const string &fileName)
 	cout << "minValue: " << minVal << endl << "maxValue: " << maxVal << endl;
 	fwrite(&minVal, sizeof(int), 1, fHan);
 	fwrite(&maxVal, sizeof(int), 1, fHan);
+
 	float C = RANGE/(float)(maxVal-minVal);
-	for (int i = 0; i < height && i < PREVIEW; i++) {
-		for (int j = 0; j < width && j < PREVIEW; j++) {
-			unsigned int l = coeff[i*width + j];
-			fwrite(&l, 4, 1, fHan);
+	float W = 1;
+	for (int i = PREVIEW; i < height; i <<= 1) W *= 1/sqrt(2);
+	for (int i = PREVIEW; i < width; i <<= 1) W *= 1/sqrt(2);
+
+	int stopHeight = height - (height - realHeight)/2;
+	int stopWidth = width - (width - realWidth)/2;
+	int stopPrHeight = stopHeight * PREVIEW / height;
+	int stopPrWidth = stopWidth * PREVIEW / width;
+
+	for (int i = 0; i < stopPrHeight && i < PREVIEW; i++) {
+		for (int j = 0; j < stopPrWidth && j < PREVIEW; j++) {
+			unsigned char l = coeff[i*width + j] * W;
+			fwrite(&l, 1, 1, fHan);
 		}
 	}
+
 	bool status = 0;
 	unsigned int tmp = 0;
-	for (int i = 0; i < height; i++) {
-		for (int j = 0; j < width; j++) {
+	for (int i = 0; i < stopHeight; i++) {
+		for (int j = 0; j < stopWidth; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
 				unsigned int l = range((coeff[i*width + j]-minVal)*C);
 				if (!status) {
@@ -183,18 +196,29 @@ void DWT::loadDWT(const string &fileName)
 	int minVal, maxVal;
 	fread(&minVal, sizeof(int), 1, fHan);
 	fread(&maxVal, sizeof(int), 1, fHan);
+
 	float C = RANGE/(float)(maxVal-minVal);
-	for (int i = 0; i < height && i < PREVIEW; i++) {
-		for (int j = 0; j < width && j < PREVIEW; j++) {
-			unsigned int l;
-			fread(&l, 4, 1, fHan);
-			coeff[i*width + j] = l;
+	float W = 1;
+	for (int i = PREVIEW; i < height; i <<= 1) W *= 1/sqrt(2);
+	for (int i = PREVIEW; i < width; i <<= 1) W *= 1/sqrt(2);
+
+	int stopHeight = height - (height - realHeight)/2;
+	int stopWidth = width - (width - realWidth)/2;
+	int stopPrHeight = stopHeight * PREVIEW / height;
+	int stopPrWidth = stopWidth * PREVIEW / width;
+
+	for (int i = 0; i < stopPrHeight && i < PREVIEW; i++) {
+		for (int j = 0; j < stopPrWidth && j < PREVIEW; j++) {
+			unsigned char l;
+			fread(&l, 1, 1, fHan);
+			coeff[i*width + j] = l/W;
 		}
 	}
+
 	bool status = 0;
 	unsigned int tmp = 0;
-	for (int i = 0; i < height; i++) {
-		for (int j = 0; j < width; j++) {
+	for (int i = 0; i < stopHeight; i++) {
+		for (int j = 0; j < stopWidth; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
 				unsigned int l;
 				if (!status) {
