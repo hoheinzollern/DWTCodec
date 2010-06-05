@@ -1,6 +1,5 @@
 #include "DWT.h"
-#include "BitReader.h"
-#include "BitWriter.h"
+#include "bitfile.h"
 
 #include <cmath>
 #include <cstdio>
@@ -122,8 +121,6 @@ void DWT::saveBMP(const string &fileName)
 void DWT::saveDWT(const string &fileName)
 {
 	FILE *fHan = fopen(fileName.data(), "wb");
-	fwrite(&width, sizeof(int), 1, fHan);
-	fwrite(&height, sizeof(int), 1, fHan);
 	fwrite(&realWidth, sizeof(int), 1, fHan);
 	fwrite(&realHeight, sizeof(int), 1, fHan);
 
@@ -160,22 +157,40 @@ void DWT::saveDWT(const string &fileName)
 		}
 	}
 
-	bool status = 0;
-	unsigned int tmp = 0;
+	int z = 0;
+	bit_file_t *bf = MakeBitFile(fHan, BF_APPEND);
 	for (int i = 0; i < stopHeight; i++) {
 		for (int j = 0; j < stopWidth; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
-				unsigned int l = range((coeff[i*width + j]-minVal)*C);
-				if (!status) {
-					tmp = l << 12;
-				} else {
-					tmp |= l;
-					fwrite(&tmp, 3, 1, fHan);
+				if (coeff[i * width + j]==0) z++;
+				if (coeff[i * width + j]!=0 || (i==stopHeight-1 && j==stopWidth-1)) {
+					if (z != 0) {
+						if (z <= 8) {
+							unsigned int n = z-1;
+							BitFilePutBit(1, bf);
+							BitFilePutBit(0, bf);
+							BitFilePutBitsInt(bf, &n, 3, sizeof(n));
+						} else {
+							while (z > 0) {
+								unsigned int n = z > 256 ? 255 : z-1;
+								BitFilePutBit(1, bf);
+								BitFilePutBit(1, bf);
+								BitFilePutBitsInt(bf, &n, 8, sizeof(n));
+								z -= 256;
+							}
+						}
+						z = 0;
+					}
+					if (i!=stopHeight-1 || j!=stopWidth-1) {
+						unsigned int l = range((coeff[i*width + j]-minVal)*C);
+						BitFilePutBit(0, bf);
+						BitFilePutBitsInt(bf, &l, 12, sizeof(l));
+					}
 				}
-				status = !status;
 			}
 		}
 	}
+	BitFileFlushOutput(bf, 0);
 
 	fclose(fHan);
 }
@@ -183,10 +198,12 @@ void DWT::saveDWT(const string &fileName)
 void DWT::loadDWT(const string &fileName)
 {
 	FILE *fHan = fopen(fileName.data(), "rb");
-	fread(&width, sizeof(int), 1, fHan);
-	fread(&height, sizeof(int), 1, fHan);
 	fread(&realWidth, sizeof(int), 1, fHan);
 	fread(&realHeight, sizeof(int), 1, fHan);
+	width = 1;
+	while (width < realWidth) width <<= 1;
+	height = 1;
+	while (height < realHeight) height <<= 1;
 	cout	<< "width: " << width << endl
 			<< "height: " << height << endl
 			<< "realWidth: " << realWidth << endl
@@ -215,20 +232,30 @@ void DWT::loadDWT(const string &fileName)
 		}
 	}
 
-	bool status = 0;
-	unsigned int tmp = 0;
+	unsigned int z = 0;
+	bit_file_t *bf = MakeBitFile(fHan, BF_READ);
 	for (int i = 0; i < stopHeight; i++) {
 		for (int j = 0; j < stopWidth; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
-				unsigned int l;
-				if (!status) {
-					fread(&tmp, 3, 1, fHan);
-					l = (tmp & 0xFFF000) >> 12;
+				unsigned int l = 0;
+				if (z > 0) {
+					coeff[i * width + j] = 0;
+					z--;
 				} else {
-					l = (tmp & 0x000FFF);
+					bool seq0 = BitFileGetBit(bf);
+					if (seq0) {
+						coeff[i * width + j] = 0;
+						bool cod8 = BitFileGetBit(bf);
+						if (cod8) {
+							BitFileGetBitsInt(bf, &z, 8, sizeof(z));
+						} else {
+							BitFileGetBitsInt(bf, &z, 3, sizeof(z));
+						}
+					} else {
+						BitFileGetBitsInt(bf, &l, 12, sizeof(l));
+						coeff[i*width + j] = l/C+minVal;
+					}
 				}
-				status = !status;
-				coeff[i*width + j] = l/C+minVal;
 			}
 		}
 	}
