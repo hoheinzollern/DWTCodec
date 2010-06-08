@@ -52,6 +52,11 @@ int Bitmap::height()
 	return v3_header.height;
 }
 
+int Bitmap::padding()
+{
+	return ((4 - width() % 4) % 4);
+}
+
 unsigned char *Bitmap::payload()
 {
 	return _payload;
@@ -108,7 +113,12 @@ void Bitmap::readImage(const string &fileName)
 	cout << v3_header.nimpcolors << " nimpcolors" <<endl;
 
 	_payload = new unsigned char[width() * height()];
-	fread(_payload, 1, width() * height(), fHan);
+	unsigned char pad[4];
+	for (int i = 0; i < height(); i++) {
+		fread(_payload + i * width(), 1, width(), fHan);
+		if (padding() > 0)
+			fread(pad, padding(), 1, fHan);
+	}
 	fclose(fHan);
 }
 
@@ -127,6 +137,11 @@ void Bitmap::writeImage(const string &fileName)
 	fwrite(&v3_header, sizeof(bmp_dib_v3_header_t), 1, fHan);
 	fwrite(palette, sizeof(palette), 1, fHan);
 
-	fwrite(_payload, 1, width() * height(), fHan);
+	unsigned char pad[4] = {0, 0, 0, 0};
+	for (int i = 0; i < height(); i++) {
+		fwrite(_payload + i * width(), 1, width(), fHan);
+		if (padding() > 0)
+			fwrite(pad, padding(), 1, fHan);
+	}
 	fclose(fHan);
 }
