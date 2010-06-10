@@ -1,5 +1,6 @@
 #include "DWT.h"
 #include "bitfile.h"
+#include "Huffman.h"
 
 #include <cmath>
 #include <cstdio>
@@ -124,31 +125,40 @@ void DWT::saveDWT(const string &fileName)
 	fwrite(&realWidth, sizeof(int), 1, fHan);
 	fwrite(&realHeight, sizeof(int), 1, fHan);
 
-	int maxVal = 0;
-	int minVal = 0;
-	for (int i = 0; i < height; i++) {
-		for (int j = 0; j < width; j++){
-			if (i >= PREVIEW || j >= PREVIEW) {
-				if (coeff[i*width+j] > maxVal) maxVal = coeff[i*width+j];
-				if (-coeff[i*width+j] > maxVal) maxVal = -coeff[i*width+j];
-				if (coeff[i*width+j] < minVal) minVal = coeff[i*width+j];
-				if (-coeff[i*width+j] < minVal) minVal = -coeff[i*width+j];
-			}
-		}
-	}
-	cout << "minValue: " << minVal << endl << "maxValue: " << maxVal << endl;
-	fwrite(&minVal, sizeof(int), 1, fHan);
-	fwrite(&maxVal, sizeof(int), 1, fHan);
-
-	float C = RANGE/(float)(maxVal-minVal);
-	float W = 1;
-	for (int i = PREVIEW; i < height; i <<= 1) W *= 1/sqrt(2);
-	for (int i = PREVIEW; i < width; i <<= 1) W *= 1/sqrt(2);
-
 	int stopHeight = height - (height - realHeight)/2;
 	int stopWidth = width - (width - realWidth)/2;
 	int stopPrHeight = stopHeight * PREVIEW / height;
 	int stopPrWidth = stopWidth * PREVIEW / width;
+
+	int maxAbsVal = 0;
+	for (int i = 0; i < stopHeight; i++) {
+		for (int j = 0; j < stopWidth; j++){
+			if (i >= PREVIEW || j >= PREVIEW) {
+				if (abs(coeff[i*width+j]) > maxAbsVal) maxAbsVal = coeff[i*width+j];
+			}
+		}
+	}
+	cout << "maxValue: " << maxAbsVal << endl;
+	fwrite(&maxAbsVal, sizeof(int), 1, fHan);
+
+	float C = RANGE/(float)(maxAbsVal*2);
+	float W = 1;
+	for (int i = PREVIEW; i < height; i <<= 1) W *= 1/sqrt(2);
+	for (int i = PREVIEW; i < width; i <<= 1) W *= 1/sqrt(2);
+
+	unsigned int *occ = new unsigned int[1 << 12];
+	memset(occ, 0, (1 << 12)*sizeof(int));
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++){
+			if (i >= PREVIEW || j >= PREVIEW) {
+				if (coeff[i*width + j] != 0)
+					occ[range((coeff[i*width + j]+maxAbsVal)*C)]++;
+			}
+		}
+	}
+	Huffman *huffman = new Huffman();
+	huffman->buildTree(occ, 1<<12);
+	delete[] occ;
 
 	for (int i = 0; i < stopPrHeight && i < PREVIEW; i++) {
 		for (int j = 0; j < stopPrWidth && j < PREVIEW; j++) {
@@ -159,6 +169,8 @@ void DWT::saveDWT(const string &fileName)
 
 	int z = 0;
 	bit_file_t *bf = MakeBitFile(fHan, BF_APPEND);
+	huffman->setFile(bf);
+	huffman->writeTree();
 	for (int i = 0; i < stopHeight; i++) {
 		for (int j = 0; j < stopWidth; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
@@ -182,15 +194,16 @@ void DWT::saveDWT(const string &fileName)
 						z = 0;
 					}
 					if (i!=stopHeight-1 || j!=stopWidth-1) {
-						unsigned int l = range((coeff[i*width + j]-minVal)*C);
+						unsigned int l = range((coeff[i*width + j]+maxAbsVal)*C);
 						BitFilePutBit(0, bf);
-						BitFilePutBitsInt(bf, &l, 12, sizeof(l));
+						huffman->writeSymbol(l);
 					}
 				}
 			}
 		}
 	}
 	BitFileFlushOutput(bf, 0);
+	delete huffman;
 
 	fclose(fHan);
 }
@@ -204,25 +217,26 @@ void DWT::loadDWT(const string &fileName)
 	while (width < realWidth) width <<= 1;
 	height = 1;
 	while (height < realHeight) height <<= 1;
+
+	int stopHeight = height - (height - realHeight)/2;
+	int stopWidth = width - (width - realWidth)/2;
+	int stopPrHeight = stopHeight * PREVIEW / height;
+	int stopPrWidth = stopWidth * PREVIEW / width;
+
 	cout	<< "width: " << width << endl
 			<< "height: " << height << endl
 			<< "realWidth: " << realWidth << endl
 			<< "realHeight: " << realHeight << endl;
 	coeff = new float[width * height];
 
-	int minVal, maxVal;
-	fread(&minVal, sizeof(int), 1, fHan);
-	fread(&maxVal, sizeof(int), 1, fHan);
+	int maxAbsVal;
+	fread(&maxAbsVal, sizeof(int), 1, fHan);
+	cout << "maxValue: " << maxAbsVal << endl;
 
-	float C = RANGE/(float)(maxVal-minVal);
+	float C = RANGE/(float)(maxAbsVal*2);
 	float W = 1;
 	for (int i = PREVIEW; i < height; i <<= 1) W *= 1/sqrt(2);
 	for (int i = PREVIEW; i < width; i <<= 1) W *= 1/sqrt(2);
-
-	int stopHeight = height - (height - realHeight)/2;
-	int stopWidth = width - (width - realWidth)/2;
-	int stopPrHeight = stopHeight * PREVIEW / height;
-	int stopPrWidth = stopWidth * PREVIEW / width;
 
 	for (int i = 0; i < stopPrHeight && i < PREVIEW; i++) {
 		for (int j = 0; j < stopPrWidth && j < PREVIEW; j++) {
@@ -234,10 +248,13 @@ void DWT::loadDWT(const string &fileName)
 
 	unsigned int z = 0;
 	bit_file_t *bf = MakeBitFile(fHan, BF_READ);
+	Huffman *huffman = new Huffman();
+	huffman->setFile(bf);
+	huffman->readTree();
 	for (int i = 0; i < stopHeight; i++) {
 		for (int j = 0; j < stopWidth; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
-				unsigned int l = 0;
+				int l = 0;
 				if (z > 0) {
 					coeff[i * width + j] = 0;
 					z--;
@@ -252,13 +269,14 @@ void DWT::loadDWT(const string &fileName)
 							BitFileGetBitsInt(bf, &z, 3, sizeof(z));
 						}
 					} else {
-						BitFileGetBitsInt(bf, &l, 12, sizeof(l));
-						coeff[i*width + j] = l/C+minVal;
+						l = huffman->readSymbol();
+						coeff[i*width + j] = l/C-maxAbsVal;
 					}
 				}
 			}
 		}
 	}
+	delete huffman;
 
 	fclose(fHan);
 }
