@@ -3,11 +3,16 @@
 
 #include <stdint.h>
 #include <string>
+#include <cstdio>
 
 #define DIM_HEAD_BMP 1078
 
 using namespace std;
 
+/**
+  * Structures used to represent bitmap headers borrowed from Wikipedia:
+  * http://en.wikipedia.org/wiki/BMP_file_format
+  */
 struct bmpfile_magic {
   unsigned char magic[2];
 };
@@ -33,6 +38,9 @@ typedef struct {
   uint32_t nimpcolors;
 } bmp_dib_v3_header_t;
 
+/**
+  * Bitmap class, used to read, create and save 8bpp grayscale images
+  */
 class Bitmap {
 private:
 	static unsigned char palette[256*4];
@@ -40,20 +48,27 @@ private:
 
 	bmpfile_header header;
 	bmp_dib_v3_header_t v3_header;
-	unsigned char *_payload;
+	unsigned char *payload;
 
-	static unsigned char nrm(int val);
 	int padding();
 public:
 	Bitmap();
 	Bitmap(int width, int height);
 	Bitmap(int width, int height, unsigned char *payload);
+	~Bitmap();
+
+	void readImage(FILE *);
 	void readImage(const string &fileName);
+
+	void writeImage(FILE *);
 	void writeImage(const string &fileName);
+
 	int width();
 	int height();
-	unsigned char *payload();
+	void set(int pos, unsigned char val);
+
 	float *getPadded(int, int);
+
 	int getPadWidth();
 	int getPadHeight();
 };

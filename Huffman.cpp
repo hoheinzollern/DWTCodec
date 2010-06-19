@@ -1,6 +1,7 @@
 #include "Huffman.h"
-#include <queue.h>
-#include <vector.h>
+
+#include <queue>
+#include <vector>
 
 Huffman::Node::Node(unsigned char t, unsigned int occ) : root(0), inner(t), occ(occ) {}
 
@@ -22,7 +23,7 @@ Huffman::Leaf::Leaf(unsigned int occ, unsigned short info) : Node(0, occ), info(
 
 Huffman::Leaf::~Leaf() {}
 
-Huffman::Huffman() : bitFile(0), tree(0) {}
+Huffman::Huffman(unsigned int bpp) : bitFile(0), tree(0), bpp(bpp) {}
 
 Huffman::~Huffman()
 {
@@ -31,7 +32,7 @@ Huffman::~Huffman()
 
 void Huffman::buildTree(unsigned int *occurrences, int n)
 {
-	priority_queue<Node *, vector<Node *>, less> q;
+	priority_queue<Node *, vector<Node *>, gt> q;
 	for (int i = 0; i < n; i++) {
 		if (occurrences[i] > 0) {
 			Leaf *n = new Leaf(occurrences[i], i);
@@ -64,7 +65,7 @@ void Huffman::writeNode(Huffman::Node *n)
 		writeNode(((InnerNode*)n)->children[0]);
 		writeNode(((InnerNode*)n)->children[1]);
 	} else {
-		BitFilePutBitsInt(bitFile, &((Leaf*)n)->info, 12, sizeof(unsigned short));
+		BitFilePutBitsInt(bitFile, &((Leaf*)n)->info, bpp, sizeof(unsigned short));
 	}
 }
 
@@ -82,7 +83,7 @@ Huffman::Node *Huffman::readNode(bool mapLeafs)
 		return new InnerNode(l, r);
 	} else {
 		unsigned short info = 0;
-		BitFileGetBitsInt(bitFile, &info, 12, sizeof(unsigned short));
+		BitFileGetBitsInt(bitFile, &info, bpp, sizeof(unsigned short));
 		Leaf *n = new Leaf(0, info);
 		if (mapLeafs) leafs[info] = n;
 		return n;
@@ -101,6 +102,7 @@ void Huffman::readTree()
 
 void Huffman::writeSymRec(Huffman::Node *n)
 {
+	if (n == tree) return;
 	if (n->root != tree) writeSymRec(n->root);
 	BitFilePutBit(((InnerNode*)n->root)->children[1]==n, bitFile);
 }
@@ -114,7 +116,7 @@ unsigned short Huffman::readSymRec(Huffman::Node *n)
 {
 	if (!n->inner)
 		return ((Leaf*)n)->info;
-	int child = BitFileGetBit(bitFile);
+	int child = BitFileGetBit(bitFile)?1:0;
 	return readSymRec(((InnerNode*)n)->children[child]);
 }
 

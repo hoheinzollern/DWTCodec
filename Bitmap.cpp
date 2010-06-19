@@ -2,18 +2,10 @@
 
 #include <cstring>
 #include <cstdlib>
-#include <cstdio>
 #include <iostream>
 
 bool Bitmap::palette_initialized = false;
 unsigned char Bitmap::palette[256*4] = {};
-
-unsigned char Bitmap::nrm(int val)
-{
-	if (val > 255) return 255;
-	if (val < 0) return 0;
-	return val;
-}
 
 Bitmap::Bitmap()
 {
@@ -30,7 +22,7 @@ Bitmap::Bitmap(int width, int height)
 	v3_header.bitspp = 8;
 	v3_header.ncolors = 256;
 	v3_header.nimpcolors = 256;
-	_payload = new unsigned char[width * height];
+	payload = new unsigned char[width * height];
 	if (!palette_initialized) {
 		for (int i = 0; i < 256; i++) {
 			palette[i*4] = i;
@@ -40,6 +32,11 @@ Bitmap::Bitmap(int width, int height)
 		}
 		palette_initialized = true;
 	}
+}
+
+Bitmap::~Bitmap()
+{
+	delete []payload;
 }
 
 int Bitmap::width()
@@ -52,14 +49,14 @@ int Bitmap::height()
 	return v3_header.height;
 }
 
+void Bitmap::set(int pos, unsigned char val)
+{
+	payload[pos] = val;
+}
+
 int Bitmap::padding()
 {
 	return ((4 - width() % 4) % 4);
-}
-
-unsigned char *Bitmap::payload()
-{
-	return _payload;
 }
 
 int Bitmap::getPadWidth()
@@ -81,7 +78,7 @@ float *Bitmap::getPadded(int padWidth, int padHeight)
 	float *result = new float[padWidth * padHeight];
 	for (int i = 0; i < height(); i++) {
 		for (int j = 0; j < width(); j++)
-			result[i * padWidth + j] = _payload[i * width() + j];
+			result[i * padWidth + j] = payload[i * width() + j];
 		for (int j = width(); j < padWidth; j++)
 			result[i * padWidth + j] = 0.0f;
 	}
@@ -91,44 +88,45 @@ float *Bitmap::getPadded(int padWidth, int padHeight)
 	return result;
 }
 
-void Bitmap::readImage(const string &fileName)
+void Bitmap::readImage(FILE *fHan)
 {
-	FILE *fHan = fopen(fileName.data(), "rb");
-	if (fHan == 0) {
-		cerr << "Errore nella lettura del file" << endl;
-		exit(1);
-	}
 	bmpfile_magic magic;
 	fread(&magic, sizeof(bmpfile_magic), 1, fHan);
 	if (magic.magic[0]!=0x42 || magic.magic[1]!=0x4D) {
-		cerr << "Formato non riconosciuto" << endl;
+		cerr << "Formato not recognized" << endl;
 		exit(1);
 	}
 	fread(&header, sizeof(bmpfile_header), 1, fHan);
 	fread(&v3_header, sizeof(bmp_dib_v3_header_t), 1, fHan);
 	fread(palette, sizeof(palette), 1, fHan);
 
-	cout << v3_header.bitspp << " bpp" <<endl;
-	cout << v3_header.ncolors << " ncolors" <<endl;
-	cout << v3_header.nimpcolors << " nimpcolors" <<endl;
+	if (v3_header.bitspp != 8 || v3_header.ncolors != 256) {
+		cerr << "Bad bitmap format: only grayscale bitmaps (8bit) are allowed" << endl;
+		exit(1);
+	}
 
-	_payload = new unsigned char[width() * height()];
+	payload = new unsigned char[width() * height()];
 	unsigned char pad[4];
 	for (int i = 0; i < height(); i++) {
-		fread(_payload + i * width(), 1, width(), fHan);
+		fread(payload + i * width(), 1, width(), fHan);
 		if (padding() > 0)
 			fread(pad, padding(), 1, fHan);
 	}
+}
+
+void Bitmap::readImage(const string &fileName)
+{
+	FILE *fHan = fopen(fileName.data(), "rb");
+	if (fHan == 0) {
+		cerr << "Errore opening the file" << endl;
+		exit(1);
+	}
+	readImage(fHan);
 	fclose(fHan);
 }
 
-void Bitmap::writeImage(const string &fileName)
+void Bitmap::writeImage(FILE *fHan)
 {
-	FILE *fHan = fopen(fileName.data(), "wb");
-	if(fHan == 0) {
-		cerr << "Errore nell'apertura' del file" << endl;
-		exit(1);
-	}
 	bmpfile_magic magic;
 	magic.magic[0]=0x42;
 	magic.magic[1]=0x4D;
@@ -139,9 +137,19 @@ void Bitmap::writeImage(const string &fileName)
 
 	unsigned char pad[4] = {0, 0, 0, 0};
 	for (int i = 0; i < height(); i++) {
-		fwrite(_payload + i * width(), 1, width(), fHan);
+		fwrite(payload + i * width(), 1, width(), fHan);
 		if (padding() > 0)
 			fwrite(pad, padding(), 1, fHan);
 	}
+}
+
+void Bitmap::writeImage(const string &fileName)
+{
+	FILE *fHan = fopen(fileName.data(), "wb");
+	if(fHan == 0) {
+		cerr << "Errore opening the file" << endl;
+		exit(1);
+	}
+	writeImage(fHan);
 	fclose(fHan);
 }
