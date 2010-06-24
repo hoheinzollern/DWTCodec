@@ -113,22 +113,6 @@ void DWT::untrasform()
 }
 
 /**
-  * Sets coefficents out of the range [-thresold, thresold] to 0
-  */
-void DWT::compress(float threshold)
-{
-	unsigned int c = 0;
-	for (unsigned int i = 0; i < height * width; i++) {
-		if (coeff[i] < threshold && coeff[i] > -threshold) {
-			coeff[i] = 0;
-			c++;
-		}
-	}
-	cout << c << " coefficients over " << width * height
-			<< " set to 0 (" << float(c) / (width * height) * 100 << "%)" << endl;
-}
-
-/**
   * Returns the bitmap representing the untrasformed image
   */
 Bitmap *DWT::toBitmap()
@@ -151,9 +135,21 @@ void DWT::save(const string &fileName)
 
 	// Header
 	fwrite(&magic, 1, 2, fHan);
+#ifdef __BIG_ENDIAN__
+	// Correct endianness for writing
+	bpp = swap_endian32(bpp);
+	realWidth = swap_endian32(realWidth);
+	realHeight = swap_endian32(realHeight);
+#endif
 	fwrite(&bpp, sizeof(bpp), 1, fHan);
 	fwrite(&realWidth, sizeof(int), 1, fHan);
 	fwrite(&realHeight, sizeof(int), 1, fHan);
+#ifdef __BIG_ENDIAN__
+	// Revert endianness
+	bpp = swap_endian32(bpp);
+	realWidth = swap_endian32(realWidth);
+	realHeight = swap_endian32(realHeight);
+#endif
 
 	// Drops half of the padding when writing
 	unsigned int stopHeight = height - (height - realHeight)/2;
@@ -162,19 +158,20 @@ void DWT::save(const string &fileName)
 	unsigned int stopPrWidth = stopWidth * PREVIEW / width;
 
 	// Looking for the highest absolute value in the transformation, used for quantization
-	unsigned int maxAbsVal = 0;
+	float maxAbsValF = 0;
 	for (unsigned int i = 0; i < stopHeight; i++) {
 		for (unsigned int j = 0; j < stopWidth; j++){
 			if (i >= PREVIEW || j >= PREVIEW) {
-				if (abs(coeff[i*width+j]) > maxAbsVal) maxAbsVal = abs(coeff[i*width+j]);
+				if (abs(coeff[i*width+j]) > maxAbsValF) maxAbsValF = abs(coeff[i*width+j]);
 			}
 		}
 	}
+	int maxAbsVal = round(maxAbsValF);
 	cout << "maxValue: " << maxAbsVal << endl;
 	fwrite(&maxAbsVal, sizeof(int), 1, fHan);
 
-	float C = ((1 << (bpp-1))-1)/(float)(maxAbsVal);	// Range value
-	float M = (1 << (bpp-1));							// Added to get only positive values
+	const float C = ((1 << (bpp-1))-1)/(float)(maxAbsVal);	// Range value
+	const float M = (1 << (bpp-1));							// Added to get only positive values
 	float W = 1, w = 1/sqrt(2);							// Factor of multiplication for preview
 	for (unsigned int i = PREVIEW; i < height; i <<= 1) W *= w;
 	for (unsigned int i = PREVIEW; i < width; i <<= 1) W *= w;
@@ -182,11 +179,12 @@ void DWT::save(const string &fileName)
 	// Huffman, searching for occurrences in the quantization
 	unsigned int *occ = new unsigned int[1 << bpp];
 	memset(occ, 0, (1 << bpp)*sizeof(int));
-	for (unsigned int i = 0; i < height; i++) {
-		for (unsigned int j = 0; j < width; j++){
+	for (unsigned int i = 0; i < stopHeight; i++) {
+		for (unsigned int j = 0; j < stopWidth; j++){
 			if (i >= PREVIEW || j >= PREVIEW) {
-				if (coeff[i*width + j] != 0)
-					occ[range(round(coeff[i*width + j]*C + M))]++;
+				float quant = coeff[i * width + j] * C;
+				if (abs(quant) >= .5f)
+					occ[range(round(quant + M))]++;
 			}
 		}
 	}
@@ -210,8 +208,9 @@ void DWT::save(const string &fileName)
 	for (unsigned int i = 0; i < stopHeight; i++) {
 		for (unsigned int j = 0; j < stopWidth; j++) {
 			if (i >= PREVIEW || j >= PREVIEW) {
-				if (coeff[i * width + j]==0) zeros++;
-				if (coeff[i * width + j]!=0 || (i==stopHeight-1 && j==stopWidth-1)) {
+				bool zero = abs(coeff[i*width + j]*C) < .5f;
+				if (zero) zeros++;
+				if (!zero || (i==stopHeight-1 && j==stopWidth-1)) {
 					if (zeros != 0) {
 						// RLE: a sequence of zeros has been found
 						if (zeros <= 8) {
@@ -264,6 +263,11 @@ void DWT::load(const string &fileName)
 	fread(&bpp, sizeof(bpp), 1, fHan);
 	fread(&realWidth, sizeof(int), 1, fHan);
 	fread(&realHeight, sizeof(int), 1, fHan);
+#ifdef __BIG_ENDIAN__
+	bpp = swap_endian32(bpp);
+	realWidth = swap_endian32(realWidth);
+	realHeight = swap_endian32(realHeight);
+#endif
 
 	// Calculate padded width and height
 	width = 1;
@@ -288,8 +292,8 @@ void DWT::load(const string &fileName)
 	fread(&maxAbsVal, sizeof(int), 1, fHan);
 	cout << "maxValue: " << maxAbsVal << endl;
 
-	float C = ((1 << (bpp-1))-1)/(float)(maxAbsVal);	// Range value
-	float M = (1 << (bpp-1));							// Added to get only positive values
+	const float C = ((1 << (bpp-1))-1)/(float)(maxAbsVal);	// Range value
+	const float M = (1 << (bpp-1));							// Added to get only positive values
 	float W = 1, w = 1/sqrt(2);							// Factor of multiplication for preview
 	for (unsigned int i = PREVIEW; i < height; i <<= 1) W *= w;
 	for (unsigned int i = PREVIEW; i < width; i <<= 1) W *= w;

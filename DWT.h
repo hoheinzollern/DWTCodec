@@ -52,7 +52,6 @@ public:
 
 	void transform();
 	void untrasform();
-	void compress(float threshold);
 	Bitmap *toBitmap();
 	void save(const string &fileName);
 	void load(const string &fileName);

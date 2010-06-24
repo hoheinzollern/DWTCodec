@@ -38,6 +38,9 @@ typedef struct {
   uint32_t nimpcolors;
 } bmp_dib_v3_header_t;
 
+uint16_t swap_endian16(uint16_t src);
+uint32_t swap_endian32(uint32_t src);
+
 /**
   * Bitmap class, used to read, create and save 8bpp grayscale images
   */
